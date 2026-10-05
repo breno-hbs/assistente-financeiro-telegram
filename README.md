@@ -150,3 +150,21 @@ planilha.
 7. Gerar token permanente via System User (pra não expirar a cada 24h)
 8. Deixar a aplicação rodando em segundo plano (systemd), pra sobreviver
    a reinícios da VM
+
+## Comandos da aba "Controle" (Telegram)
+
+| Comando | O que faz |
+|---|---|
+| `/saldo <valor>` | grava o saldo em `Controle!F18` e responde o resumo |
+| `/fatura <valor>` | grava a fatura em `Controle!F19` e responde o resumo |
+| `/posso` | só responde o resumo (F22 Dinheiro livre, F23 Disponível no Lazer, F24 Posso gastar agora) |
+
+- Valores aceitos: `1156,26`, `1.156,26`, `1156.26` (negativos, texto e vazio são rejeitados).
+- Os endereços das células ficam em `application.properties` (`controle.*`).
+- Só respondem aos chat ids em `TELEGRAM_ALLOWED_CHAT_IDS` (separados por vírgula).
+  Sem essa variável, os comandos são ignorados para todo mundo:
+
+```bash
+export TELEGRAM_ALLOWED_CHAT_IDS=123456789
+java -jar target/assistente-financeiro.jar
+```

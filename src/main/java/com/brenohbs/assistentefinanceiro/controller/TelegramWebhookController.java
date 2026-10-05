@@ -1,5 +1,6 @@
 package com.brenohbs.assistentefinanceiro.controller;
 
+import com.brenohbs.assistentefinanceiro.service.ComandoControleService;
 import com.brenohbs.assistentefinanceiro.service.ConversaService;
 import com.brenohbs.assistentefinanceiro.service.TelegramService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,13 +14,16 @@ public class TelegramWebhookController {
 
     private final ConversaService conversaService;
     private final TelegramService telegramService;
+    private final ComandoControleService comandoControleService;
 
     @Value("${telegram.webhook-secret}")
     private String webhookSecret;
 
-    public TelegramWebhookController(ConversaService conversaService, TelegramService telegramService) {
+    public TelegramWebhookController(ConversaService conversaService, TelegramService telegramService,
+                                     ComandoControleService comandoControleService) {
         this.conversaService = conversaService;
         this.telegramService = telegramService;
+        this.comandoControleService = comandoControleService;
     }
 
     @PostMapping
@@ -41,6 +45,14 @@ public class TelegramWebhookController {
             String texto = mensagem.path("text").asText();
 
             if (chatId == 0 || texto.isBlank()) {
+                return ResponseEntity.ok().build();
+            }
+
+            // /saldo, /fatura e /posso: só para chats permitidos; os demais são ignorados
+            if (comandoControleService.ehComando(texto)) {
+                if (comandoControleService.chatPermitido(chatId)) {
+                    telegramService.enviarMensagem(chatId, comandoControleService.processar(texto));
+                }
                 return ResponseEntity.ok().build();
             }
 
