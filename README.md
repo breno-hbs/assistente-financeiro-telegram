@@ -88,6 +88,8 @@ Se o projeto não tiver o Maven Wrapper (`mvnw`), instale o Maven e use `mvn cle
 
 ## Status
 
+Em execução: o bot está rodando num servidor próprio e responde no Telegram (uso pessoal).
+
 Implementado:
 
 - Integração com o Google Sheets (leitura e escrita de gastos)
