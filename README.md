@@ -1,170 +1,103 @@
-# Assistente Financeiro (WhatsApp + Google Sheets)
+# Assistente Financeiro (Telegram e Google Sheets)
 
-Projeto Spring Boot que vai virar um bot no WhatsApp pra lançar gastos
-direto na planilha de orçamento pessoal.
+Bot pessoal em Java e Spring Boot para registrar gastos e consultar o resumo do orçamento numa planilha do Google Sheets, por comandos e menus no Telegram.
 
-## Status atual
+O projeto começou com a API de WhatsApp (Cloud API) e hoje o fluxo principal é pelo Telegram.
 
-✅ Integração com Google Sheets (ler e escrever gastos)
-✅ Catálogo de categorias/itens (menu do bot)
-✅ Endpoints de teste manual (sem WhatsApp ainda)
-✅ Webhook do WhatsApp (recebe mensagem, responde de volta)
-✅ Lógica de conversa (máquina de estado: categoria → item → valor)
-⏳ Token permanente da API (via System User) — hoje usa o token temporário de 24h
-⏳ Nginx + registro do webhook no painel da Meta (últimos passos manuais)
+## O que faz
 
-## ⚠️ Antes de rodar: 2 coisas pra ajustar
+- Registra gastos escolhendo categoria, item e valor numa conversa guiada (menu do bot).
+- Soma o valor informado ao valor já existente do mês atual, na linha do item correspondente da planilha.
+- Atualiza e consulta a aba de controle com comandos (`/saldo`, `/fatura`, `/posso`).
+- Responde apenas aos chats autorizados.
 
-### 1. Confirmar os números de linha da planilha
+## Tecnologias
 
-O arquivo `CatalogoGastos.java` tem os números de linha de cada item
-**estimados** a partir da ordem vista nas capturas de tela. Abra a aba
-"Acompanhamento" na sua planilha e confirme se os números batem
-(o número da linha aparece à esquerda, no Google Sheets). Se algum item
-estiver em outra linha, corrija no arquivo.
+- Java e Spring Boot
+- API REST
+- Google Sheets API (conta de serviço)
+- Telegram Bot
+- Maven
 
-### 2. Preencher `application.properties`
+## Como funciona
 
-Edite `src/main/resources/application.properties`:
+1. A pessoa envia uma mensagem ao bot.
+2. A conversa segue uma máquina de estados: categoria, item, valor.
+3. O serviço grava o valor na célula correta da planilha (mês atual e linha do item).
+4. O bot responde com a confirmação ou com o resumo.
 
-```properties
-google.sheets.credentials-path=/home/ubuntu/credentials/google-service-account.json
-google.sheets.spreadsheet-id=SEU_ID_AQUI
-```
+O catálogo de categorias e itens, com a linha de cada item na planilha, fica na classe `CatalogoGastos`.
 
-- `credentials-path`: onde você vai colocar o arquivo JSON da Service
-  Account dentro da VM (veja o passo abaixo)
-- `spreadsheet-id`: o trecho da URL da sua planilha entre `/d/` e `/edit`.
-  Exemplo: se a URL é
-  `https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlmNoPqRs/edit`,
-  o ID é `1AbCdEfGhIjKlmNoPqRs`.
+## Endpoints de teste
 
-## Como levar o projeto pra VM
+| Método | Rota | O que faz |
+|---|---|---|
+| GET | `/categorias` | Lista o catálogo de categorias e itens |
+| POST | `/gastos` | Registra um gasto (soma ao valor do mês atual) |
 
-Na sua VM Oracle, dentro da pasta do usuário `ubuntu`:
+Exemplo:
 
 ```bash
-mkdir -p ~/credentials
-# copie o JSON da Service Account pra ~/credentials/google-service-account.json
-# (pode usar scp do seu computador, ou colar o conteúdo com nano)
-```
-
-Pra copiar o projeto inteiro (rode isso no seu computador, não na VM):
-
-```bash
-scp -i "caminho\para\sua-chave.key" -r assistente-financeiro ubuntu@129.148.63.137:~/
-```
-
-## Como rodar (dentro da VM)
-
-```bash
-cd ~/assistente-financeiro
-./mvnw clean package -DskipTests
-java -jar target/assistente-financeiro.jar
-```
-
-Se não tiver o `mvnw` (Maven Wrapper) no projeto, instale o Maven antes:
-```bash
-sudo apt install maven -y
-mvn clean package -DskipTests
-java -jar target/assistente-financeiro.jar
-```
-
-## Como testar (antes do WhatsApp existir)
-
-Com a aplicação rodando, abra outro terminal SSH (ou use o mesmo depois
-de rodar em background com `nohup ... &`) e teste:
-
-```bash
-# Ver o catálogo de categorias/itens
 curl http://localhost:8080/categorias
 
-# Registrar um gasto de teste (SOMA no valor já existente do mês atual)
 curl -X POST http://localhost:8080/gastos \
      -H "Content-Type: application/json" \
      -d '{"categoria":"Despesas Essenciais","item":"Gasolina","valor":50}'
 ```
 
-Depois, confira na própria planilha se o valor mudou na célula certa
-(mês atual, linha do item testado).
-
-## Preencher o restante do application.properties
-
-```properties
-whatsapp.access-token=SEU_TOKEN_GERADO_NO_PAINEL
-whatsapp.phone-number-id=SEU_PHONE_NUMBER_ID
-whatsapp.verify-token=escolha-uma-senha-aqui
-```
-
-- `access-token`: o token gerado na tela "API Setup" (Etapa 1). É o
-  temporário de 24h por enquanto — funciona pra testar, mas expira.
-- `phone-number-id`: também está na tela de API Setup.
-- `verify-token`: **você inventa** qualquer palavra/senha. Só precisa
-  colar essa mesma palavra no painel da Meta na hora de registrar o
-  webhook (próximo passo).
-
-## Configurar o Nginx (proxy HTTPS -> Spring Boot)
-
-O Spring Boot roda na porta 8080 (HTTP puro). A Meta exige HTTPS na
-porta 443. O Nginx faz essa ponte usando o certificado que já geramos.
-
-Na VM:
-```bash
-sudo apt install nginx -y
-sudo cp nginx-assistente-financeiro.conf /etc/nginx/sites-available/assistente-financeiro
-sudo ln -s /etc/nginx/sites-available/assistente-financeiro /etc/nginx/sites-enabled/
-sudo nginx -t          # testa se a configuração está válida
-sudo systemctl restart nginx
-```
-
-## Registrar o webhook no painel da Meta
-
-1. No app da Meta, vá em **WhatsApp > Configuration** (ou "Configuração")
-2. No campo **Callback URL**, coloque: `https://brenobot.duckdns.org/webhook`
-3. No campo **Verify Token**, coloque a mesma senha que você escolheu em
-   `whatsapp.verify-token` no application.properties
-4. Clique em **Verify and Save** — a Meta vai chamar o GET do webhook
-   pra confirmar. Se dor certo, o Spring Boot precisa estar rodando
-   nesse momento pra responder.
-5. Depois de salvar, ainda na mesma tela, procure a seção de
-   **"Webhook fields"** e clique em **"Manage"** — marque o campo
-   **"messages"** pra assinar (subscribe). Sem isso, a Meta nem manda
-   as mensagens recebidas pro seu webhook.
-
-## Testar o fluxo completo
-
-Com o Spring Boot rodando (e o Nginx configurado), manda qualquer
-mensagem pro número de teste do WhatsApp, pelo seu celular cadastrado
-como destinatário. O bot deve responder com o menu de categorias, e o
-fluxo completo (categoria → item → valor) deve terminar gravando na
-planilha.
-
-## Próximos passos
-
-1. Confirmar linhas da planilha (topo deste arquivo)
-2. Rodar e testar os endpoints manuais (`/categorias`, `/gastos`)
-3. Preencher as credenciais do WhatsApp acima
-4. Configurar Nginx
-5. Registrar o webhook no painel da Meta
-6. Testar o fluxo completo pelo celular
-7. Gerar token permanente via System User (pra não expirar a cada 24h)
-8. Deixar a aplicação rodando em segundo plano (systemd), pra sobreviver
-   a reinícios da VM
-
-## Comandos da aba "Controle" (Telegram)
+## Comandos do Telegram
 
 | Comando | O que faz |
 |---|---|
-| `/saldo <valor>` | grava o saldo em `Controle!F18` e responde o resumo |
-| `/fatura <valor>` | grava a fatura em `Controle!F19` e responde o resumo |
-| `/posso` | só responde o resumo (F22 Dinheiro livre, F23 Disponível no Lazer, F24 Posso gastar agora) |
+| `/saldo <valor>` | Grava o saldo na aba de controle e responde o resumo |
+| `/fatura <valor>` | Grava a fatura na aba de controle e responde o resumo |
+| `/posso` | Responde o resumo: dinheiro livre, disponível no lazer e quanto posso gastar agora |
 
-- Valores aceitos: `1156,26`, `1.156,26`, `1156.26` (negativos, texto e vazio são rejeitados).
-- Os endereços das células ficam em `application.properties` (`controle.*`).
-- Só respondem aos chat ids em `TELEGRAM_ALLOWED_CHAT_IDS` (separados por vírgula).
-  Sem essa variável, os comandos são ignorados para todo mundo:
+- Valores aceitos: `1156,26`, `1.156,26` e `1156.26`. Valores negativos, texto e vazio são rejeitados.
+- Os endereços das células ficam em `application.properties` (propriedades `controle.*`).
+- Os comandos só respondem aos chat IDs listados em `TELEGRAM_ALLOWED_CHAT_IDS` (separados por vírgula). Sem essa variável, os comandos são ignorados para todos.
+
+## Configuração
+
+Edite `src/main/resources/application.properties` e defina:
+
+```properties
+google.sheets.credentials-path=/caminho/para/google-service-account.json
+google.sheets.spreadsheet-id=ID_DA_PLANILHA
+```
+
+- `credentials-path`: caminho do arquivo JSON da conta de serviço do Google.
+- `spreadsheet-id`: trecho da URL da planilha entre `/d/` e `/edit`.
+
+Variável de ambiente para o Telegram:
 
 ```bash
-export TELEGRAM_ALLOWED_CHAT_IDS=123456789
+export TELEGRAM_ALLOWED_CHAT_IDS=ID_DO_CHAT
+```
+
+Antes do primeiro uso, confirme se os números de linha em `CatalogoGastos.java` correspondem às linhas da aba de acompanhamento da sua planilha.
+
+## Como rodar
+
+```bash
+./mvnw clean package -DskipTests
 java -jar target/assistente-financeiro.jar
 ```
+
+Se o projeto não tiver o Maven Wrapper (`mvnw`), instale o Maven e use `mvn clean package -DskipTests`.
+
+## Status
+
+Implementado:
+
+- Integração com o Google Sheets (leitura e escrita de gastos)
+- Catálogo de categorias e itens (menu do bot)
+- Endpoints de teste manual
+- Lógica de conversa por máquina de estados
+- Comandos de Telegram com lista de chats autorizados
+- Webhook da API de WhatsApp (recebe e responde mensagens)
+
+## Próximos passos
+
+- Executar a aplicação em segundo plano com `systemd`, para sobreviver a reinícios do servidor
+- Adicionar testes automatizados
